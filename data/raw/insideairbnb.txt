@@ -1,1 +1,5 @@
+listings training dataset: https://drive.google.com/file/d/17U0C2i5C6t36PSCkEXPqOY4mDeIGcV82/view?usp=sharing
 
+
+reviews training dataset: 
+https://drive.google.com/file/d/1gvMGs7aBbEpddpyv09m9q0wQYizbtzbZ/view?usp=sharing
