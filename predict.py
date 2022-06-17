@@ -21,4 +21,3 @@ plt.xlabel('True rent price')
 plt.ylabel('Predicted price')
 plt.show()
 
-# %%
