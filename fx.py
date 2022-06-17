@@ -1,9 +1,16 @@
 # define an import function to select numerical-columns
 
-def import_num_listings (dat_path):
+from pandas import NA
+
+
+def import_num_listings (url):  
   import pandas as pd
-  df = pd.read_csv(dat_path)
+  import requests
+  import io
   
+  s=requests.get(url).content
+  df=pd.read_csv(io.StringIO(s.decode('utf-8')))
+    
   # convert price to 'float'
   df['price'] = [float(n.replace(',','')[1:]) for n in df['price']]
   
@@ -25,10 +32,14 @@ def import_num_listings (dat_path):
   return df2
 
 
-def import_str_listings (dat_path, keywrd):
+def import_str_listings (url, keywrd):
   # import data
   import pandas as pd
-  df = pd.read_csv(dat_path)
+  import requests
+  import io
+  
+  s=requests.get(url).content
+  df=pd.read_csv(io.StringIO(s.decode('utf-8')))
   
   # set index 'id'
   df = df.set_index('id')  
@@ -45,9 +56,15 @@ def import_str_listings (dat_path, keywrd):
 
 
 # define an import function for review comments
-def import_rev_comments (rev_path):
+def import_rev_comments (url):
   # import raw data
-  df = pd.read_csv(rev_path)
+  import pandas as pd
+  import requests
+  import io
+  
+  s=requests.get(url).content
+  df=pd.read_csv(io.StringIO(s.decode('utf-8')))  
+  
   df = df[['listing_id','comments']]
   df.shape
   
@@ -59,34 +76,32 @@ def import_rev_comments (rev_path):
   return df2
 
 
-# select correlated features  
-from sklearn.feature_selection import SelectKBest
-from sklearn.feature_selection import f_regression
-from sklearn.model_selection import train_test_split
-from sklearn import linear_model
-import pickle
-
+# select correlated features
 def select_features(X_train, y_train, X_test):
-	# configure to select all features
-	fs = SelectKBest(score_func=f_regression, k='all')
+  from sklearn.feature_selection import SelectKBest
+  from sklearn.feature_selection import f_regression
+  
+  # configure to select all features
+  fs = SelectKBest(score_func=f_regression, k='all')
+  
 	# learn relationship from training data
-	fs.fit(X_train, y_train)
+  fs.fit(X_train, y_train)
 	# transform train input data
-	X_train_fs = fs.transform(X_train)
+  X_train = fs.transform(X_train)
 	# transform test input data
-	X_test_fs = fs.transform(X_test)
-	return X_train_fs, X_test_fs, fs
+  X_test = fs.transform(X_test)
+  
+  return X_train, X_test, fs
 
-
-import nltk
-from nltk.tokenize import word_tokenize
-from nltk.corpus import stopwords
-nltk.download('punkt')
-nltk.download('stopwords')
 
 def create_word_token (corpus):
+  import nltk
+  from nltk.tokenize import word_tokenize
+  from nltk.corpus import stopwords  
+  
   # tokenize
-  words = word_tokenize(corpus)
+  lines = str(corpus)
+  words = word_tokenize(lines)
   
   # filtered by stopWords
   stopWords = set(stopwords.words('english'))
@@ -112,15 +127,14 @@ def create_word_token (corpus):
   return w_cleaned
 
 
-from textblob import TextBlob
-from textblob import Word
-import nltk
-from nltk import word_tokenize 
-from nltk.tag import pos_tag
-nltk.download('wordnet')
-
 # function to select noun and adj from corpus
 def extrac_nadj (corpus):
+  from textblob import TextBlob
+  from textblob import Word
+  import nltk
+  from nltk import word_tokenize 
+  from nltk.tag import pos_tag
+  
   lines = corpus.lower()
   tokenized = nltk.word_tokenize(lines)
   
@@ -133,11 +147,33 @@ def extrac_nadj (corpus):
 
 def checkSentiment(wList):
   from textblob import TextBlob
-  from textblob import Word
   import statistics
-  # wlst = [TextBlob(x).correct() for x in wList]   
-  # wlst2 = [Word(word).lemmatize() for word in wlst]
+  import pandas as pd
     
-  polarity = [TextBlob(wd).sentiment[0] for wd in wList]  
+  polarity = [TextBlob(wd).sentiment[0] for wd in wList]
+  if len(polarity) != 0:
+    return round(statistics.mean(polarity),3)
+  return pd.NA
+
+
+# define function to check sentiment for the review comments
+def review_sentiment_fromPickle (path_to_pkl):
+  import pickle
+  import pandas as pd   
   
-  return round(statistics.mean(polarity),3)
+  # read in pickle file
+  rev_comments = pd.read_pickle(path_to_pkl)
+  rev_comments = rev_comments.set_index('listing_id')
+  
+  # extract noun and adj for each review comment and measure sentiment
+  rev_sentiments = pd.DataFrame(index=rev_comments.index)
+  for corpus in rev_comments['comments']:
+    nadjList = extrac_nadj(corpus)
+    senti_mean = checkSentiment(nadjList)
+    rev_sentiments.append(senti_mean)
+  
+  return rev_sentiments
+
+
+if __name__ == '__main__':
+  review_sentiment_fromPickle()
