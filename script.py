@@ -305,7 +305,7 @@ def review_sentiment_fromPickle (path_to_pkl):
   return rev_sentiments
 
 #%%
-review_sentiments = review_sentiment_fromPickle('./data/raw/comments.pkl')
+review_sentiments = review_sentiment_fromPickle('./data/raw/comments.pkl','rb')
 
 
 # %%
