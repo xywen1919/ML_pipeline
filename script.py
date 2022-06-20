@@ -42,10 +42,6 @@ list_num.isnull().sum()    # null values
 
 #%%
 # write to pickle
-from base64 import decode
-import pickle
-from tkinter.font import names
-import matplotlib
 list_num.to_pickle("./data/raw/list_num.pkl")
 
 #%%
@@ -131,7 +127,7 @@ rev_df.describe
 rev_df.to_pickle("./data/raw/comments.pkl")
 
 # ==========================================================
-
+# with numerical data only, try build linear regression model
 # %%
 # build linear regression model 
 import pickle
@@ -192,7 +188,7 @@ with open (pkl_FileName, 'wb')as file:
   pickle.dump(linear, file)
 
 # ========================================================
-
+# linear model dosen't make any sense, go preprocess text data
 # %%
 import nltk
 from nltk.tokenize import word_tokenize
@@ -323,18 +319,32 @@ import pandas as pd
 list_num = pd.read_pickle("./data/raw/list_num.pkl")
 
 # plot the price histogram
-plt.hist(list_num['price'])
+# plt.hist(list_num['price'])
+plt.boxplot(list_num['price'])
+
+# remove outliers 
+def remove_outlier(df_in, col_name):
+    q1 = df_in[col_name].quantile(0.25)
+    q3 = df_in[col_name].quantile(0.75)
+    iqr = q3-q1 #Interquartile range
+    fence_low  = q1-1.5*iqr
+    fence_high = q3+1.5*iqr
+    df_out = df_in.loc[(df_in[col_name] > fence_low) & (df_in[col_name] < fence_high)]
+    return df_out
+
+list_num_cutted = remove_outlier(list_num, 'price')
+sns.boxplot(list_num_cutted['price'])
 
 #%%
 # binning the target variable --'price'
-list_num['price_bin'] = pd.qcut(list_num['price'], q=10, precision=0)
-list_num['price_bin'].value_counts()
+list_num_cutted['price_bin'] = pd.qcut(list_num_cutted['price'], q=5, precision=0)
+list_num_cutted['price_bin'].value_counts()
 
 #%%
-list_num.info() # check if set id as idext
-list_num.head(3)
+list_num_cutted.info() # check if set id as idext
+list_num_cutted.head(3)
 
-list_num.to_pickle('./data/intermid/list_num.pkl')
+list_num_cutted.to_pickle('./data/intermid/list_num_cutted.pkl')
 
 #%%
 import pandas as pd
@@ -345,9 +355,9 @@ list_obj = pd.read_pickle("./data/raw/list_obj.pkl")
 
 #%%
 # tokenize some of the columns for further analysis
-list_obj['neighborhood_overview'] = [create_word_token(corpus) for corpus in list_obj['neighborhood_overview']]
+list_obj['neighborhood_overview'] = [fx.create_word_token(corpus) for corpus in list_obj['neighborhood_overview']]
 
-list_obj['amenities'] = [create_word_token(corpus) for corpus in list_obj['amenities']]
+list_obj['amenities'] = [fx.create_word_token(corpus) for corpus in list_obj['amenities']]
 
 list_obj.info() 
 # list_obj = list_obj.set_index('id')
@@ -357,7 +367,7 @@ list_obj.to_pickle('./data/intermid/list_obj.pkl')
 
 #%%
 # join listing dfs
-dataListing = list_num.join(list_obj, how='outer')
+dataListing = list_num_cutted.join(list_obj, how='outer')
 # 
 review_sentiments = pd.read_pickle('./data/raw/review_sentiments.pkl')
 review_sentiments.index = review_sentiments.index.rename('id')
@@ -365,7 +375,7 @@ review_sentiments.columns = ['review_senti']
 data = dataListing.join(review_sentiments, how='outer')
 data.info()
 #%%
-# cleanse data in additional
+# clean data in additional
 data['n_amenities'] = [len(amen) for amen in data['amenities']]
 
 from nltk import word_tokenize
@@ -374,14 +384,83 @@ data['neighbourhood'] = [word_tokenize(str(nei))[0] for nei in data['neighbourho
 
 data = data.drop(['host_url', 'host_name','host_since','host_about','host_response_time','host_thumbnail_url','host_picture_url','host_verifications', 'neighborhood_overview'], axis=1)
 
-data.to_pickle('./data/intermid/data.pkl')
+# drop all rows that have na values
+data = data.dropna()
+
+# pickle the file
+data.to_pickle('./data/final/data.pkl')
 
 #%%
 
+
+#%%
+
+# model pipeline
+def test_model (data,model):
+  from sklearn.preprocessing import OneHotEncoder, StandardScaler
+  from sklearn.preprocessing import LabelEncoder
+  from sklearn.compose import ColumnTransformer  
+  from sklearn.model_selection import train_test_split
+  from sklearn.pipeline import make_pipeline
+  from sklearn.model_selection import cross_val_score
+      
+  # seperate X and y variables
+  X, y = data.drop(['price','price_bin', 'amenities'], axis=1), data['price_bin'].to_numpy()
+
+  # Label encode y
+  y_label = LabelEncoder().fit_transform(y)
+  
+  # preprocess X features depends on dtype
+  numerical_features = X.select_dtypes(exclude="object").columns.to_list()
+  categorical_features = X.select_dtypes(include="object").columns.to_list()
+  X[categorical_features] = X[categorical_features].astype(str)
+
+  categorical_preprocessor = OneHotEncoder(handle_unknown="ignore")
+  numerical_preprocessor = StandardScaler()
+  
+  # transform X features and then concat
+  from sklearn.compose import ColumnTransformer
+  preprocessor = ColumnTransformer([
+    ('one-hot-encoder', categorical_preprocessor, categorical_features),
+    ('standard_scaler', numerical_preprocessor, numerical_features)])
+
+  # buid model pipeline
+  model = make_pipeline(preprocessor, model)
+
+  # split train, test subsets
+  X_train, X_test, y_train, y_test = train_test_split(X, y_label)
+
+  # train the model
+  _ = model.fit(X_train, y_train)
+  print(model.score(X_train, y_train))
+     
+  # estimate model scale
+  score = cross_val_score(model, X_test, y_test,cv=10)
+  
+  return score
+
+
+#%%
+# read-in data
+import pickle
+data = pickle.load(open('./data/final/data.pkl','rb'))
+
+# compare model performance
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import GradientBoostingRegressor, GradientBoostingRegressor
+from xgboost import XGBRegressor
+
+model_list = [LogisticRegression(), XGBRegressor(), GradientBoostingRegressor()]
+
+for m in model_list:
+  print(f'{m}perfomance :{test_model(data, m)}')
+  
+
+#%%
+# buid model
 # seperate X and y variables
 X, y = data.drop(['price','price_bin', 'amenities'], axis=1), data['price_bin'].to_numpy()
 
-#%%
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.preprocessing import LabelEncoder
 y_label = LabelEncoder().fit_transform(y)
@@ -406,7 +485,7 @@ preprocessor = ColumnTransformer([
 # build model pipeline
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import make_pipeline
-
+from sklearn.metrics import accuracy_score
 model = make_pipeline(preprocessor, LogisticRegression(max_iter=500))
 
 # split train, test subsets
@@ -417,16 +496,11 @@ X_train, X_test, y_train, y_test = train_test_split(X, y_label, random_state=100
 # train the model
 _ = model.fit(X_train, y_train)
 
+# prediction
+y_pred = model.predict(X_test)
+accuracy_score(y_test,y_pred)
 
-
-
-#%%
+# %%
 import pickle
-# save model and test-datasets for future use
-pickle.dump(model, open('./models/model.pkl', 'wb'))
-
-pickle.dump(X_test, open('./data/X0_test.pkl','wb'))
-pickle.dump(y_test, open('./data/y0_test.pkl','wb'))
-
-
+pickle.dump(model,open('./models/model.pkl','wb'))
 # %%
