@@ -4,7 +4,7 @@ import pickle
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-with open ('linear_model.pkl', 'rb') as file:
+with open ('./models/linear_model.pkl', 'rb') as file:
   linear = pickle.load(file)
 
 with open ('./data/intermid/X_test.pkl', 'rb') as file:
@@ -24,18 +24,18 @@ plt.show()
 linear.score(X_test,y_test)
 
 # %%
-# load model and X0_test y0_test
+# load model2 and X_test y_test
 import pickle
 model = pickle.load(open('./models/model.pkl', 'rb'))
 
-X0_test = pickle.load(open('./data/X0_test.pkl','rb'))
-y0_test = pickle.load(open('./data/y0_test.pkl','rb'))
+X2_test = pickle.load(open('./data/final/X_test.pkl','rb'))
+y2_test = pickle.load(open('./data/final/y_test.pkl','rb'))
 
-model.predict(X0_test)[:5]
-
-# %%
-y0_test[:5]
+model.predict(X2_test)[:5]
 
 # %%
-model.score(X0_test,y_test)
+y2_test[:5]
+
+# %%
+model.score(X2_test,y2_test)
 # %%

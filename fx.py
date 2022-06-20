@@ -177,3 +177,58 @@ def review_sentiment_fromPickle (path_to_pkl):
 
 if __name__ == '__main__':
   review_sentiment_fromPickle()
+  
+# remove outliers 
+def remove_outlier(df_in, col_name):
+    q1 = df_in[col_name].quantile(0.25)
+    q3 = df_in[col_name].quantile(0.75)
+    iqr = q3-q1 #Interquartile range
+    fence_low  = q1-1.5*iqr
+    fence_high = q3+1.5*iqr
+    df_out = df_in.loc[(df_in[col_name] > fence_low) & (df_in[col_name] < fence_high)]
+    return df_out
+  
+  
+# model pipeline
+def test_model (data,model):
+  from sklearn.preprocessing import OneHotEncoder, StandardScaler
+  from sklearn.preprocessing import LabelEncoder
+  from sklearn.compose import ColumnTransformer  
+  from sklearn.model_selection import train_test_split
+  from sklearn.pipeline import make_pipeline
+  from sklearn.model_selection import cross_val_score
+      
+  # seperate X and y variables
+  X, y = data.drop(['price','price_bin', 'amenities'], axis=1), data['price_bin'].to_numpy()
+
+  # Label encode y
+  y_label = LabelEncoder().fit_transform(y)
+  
+  # preprocess X features depends on dtype
+  numerical_features = X.select_dtypes(exclude="object").columns.to_list()
+  categorical_features = X.select_dtypes(include="object").columns.to_list()
+  X[categorical_features] = X[categorical_features].astype(str)
+
+  categorical_preprocessor = OneHotEncoder(handle_unknown="ignore")
+  numerical_preprocessor = StandardScaler()
+  
+  # transform X features and then concat
+  from sklearn.compose import ColumnTransformer
+  preprocessor = ColumnTransformer([
+    ('one-hot-encoder', categorical_preprocessor, categorical_features),
+    ('standard_scaler', numerical_preprocessor, numerical_features)])
+
+  # buid model pipeline
+  model = make_pipeline(preprocessor, model)
+
+  # split train, test subsets
+  X_train, X_test, y_train, y_test = train_test_split(X, y_label)
+
+  # train the model
+  _ = model.fit(X_train, y_train)
+  print(model.score(X_train, y_train))
+     
+  # estimate model scale
+  score = cross_val_score(model, X_test, y_test,cv=10)
+  
+  return score
